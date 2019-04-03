@@ -20,6 +20,8 @@ jobs:
         - ./bin/golangci-lint run ./...
     - stage: build
       install: skip
+      before_script:
+        - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
       script:
         - docker build . -t maxormo/cluster-monitor
         - docker push maxormo/cluster-monitor

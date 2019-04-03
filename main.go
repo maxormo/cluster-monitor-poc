@@ -45,8 +45,6 @@ func main() {
 	soft_perdicate := GetAgePredicate(*soft_age)
 	hard_predicate := GetAgePredicate(*hard_age)
 
-	kube.HardRestartNode(az, false, "aks-nodepool1-12720191-10", "")
-
 	logger.Printfln("finally started...")
 
 	go PodsMonitor(collections, kube, soft_perdicate, hard_predicate, collectionDelay, dry_run, namespace, az, currentNode, loopDelay)

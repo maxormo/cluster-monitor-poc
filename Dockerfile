@@ -10,6 +10,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build
 
 FROM alpine:3.9
 
-RUN apk update && apk add ca-certificates
+RUN apk update && apk add ca-certificates && apk add bash
 WORKDIR /app
 COPY --from=build /app/cluster-monitor-poc cluster-monitor-poc 
+ENTRYPOINT [ "/app/cluster-monitor-poc" ]

@@ -2,9 +2,21 @@ package cluster_monitor
 
 import (
 	"cluster-monitor-poc/entities"
+	"cluster-monitor-poc/kubernetes"
+	"cluster-monitor-poc/provider/azure"
 	"fmt"
 	"time"
 )
+
+type PodPredicate = func(pod entities.Pod) bool
+
+type MonitorSettings struct {
+	Kube        kubernetes.Kubernetes
+	DryRun      bool
+	Az          azure.Azure
+	CurrentNode string
+	LoopDelay   int
+}
 
 func GetAgePredicate(age int) func(pod entities.Pod) bool {
 	return func(pod entities.Pod) bool {

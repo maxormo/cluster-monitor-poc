@@ -19,7 +19,7 @@ import (
 )
 
 type Kubernetes struct {
-	Kubeclient *kubernetes.Clientset
+	Kubeclient kubernetes.Interface
 }
 
 func GetKubeClient() Kubernetes {
@@ -27,7 +27,7 @@ func GetKubeClient() Kubernetes {
 
 	handlePanicError(err)
 
-	return getkubeclient(config)
+	return getKubeclient(config)
 }
 
 func GetKubeClientFromConfig(kubeconfig string) Kubernetes {
@@ -36,10 +36,10 @@ func GetKubeClientFromConfig(kubeconfig string) Kubernetes {
 
 	handlePanicError(err)
 
-	return getkubeclient(config)
+	return getKubeclient(config)
 }
 
-func getkubeclient(config *rest.Config) Kubernetes {
+func getKubeclient(config *rest.Config) Kubernetes {
 	clientset, err := kubernetes.NewForConfig(config)
 
 	handlePanicError(err)
@@ -161,6 +161,14 @@ func (kube Kubernetes) CordonNode(nodeName string) {
 	logger.Printfln("node %s condoned", nodeName)
 }
 
+func (kube Kubernetes) UncordonNode(nodeName string) {
+	logger.Printfln("attempting to uncordon node %s", nodeName)
+
+	kube.cordonUncordonNode(nodeName, false)
+	logger.Printfln("node %s uncordoned", nodeName)
+
+}
+
 func (kube Kubernetes) cordonUncordonNode(nodeName string, isCordone bool) {
 	node, err := kube.Kubeclient.CoreV1().Nodes().Get(nodeName, meta.GetOptions{})
 
@@ -172,19 +180,12 @@ func (kube Kubernetes) cordonUncordonNode(nodeName string, isCordone bool) {
 	handlePanicError(err)
 }
 
-func (kube Kubernetes) UncordonNode(nodeName string) {
-	logger.Printfln("attempting to uncordon node %s", nodeName)
-
-	kube.cordonUncordonNode(nodeName, false)
-	logger.Printfln("node %s uncordoned", nodeName)
-
-}
-
 func (kube Kubernetes) GetPodsForNode(nodeName string) []v1.Pod {
 	pods, err := kube.Kubeclient.CoreV1().Pods(meta.NamespaceAll).List(meta.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String()})
 	handlePanicError(err)
 	return pods.Items
 }
+
 func (kube Kubernetes) EvictPods(nodeName string) {
 	pods := kube.GetPodsForNode(nodeName)
 	logger.Printfln("will evict %v pods", len(pods))
@@ -192,6 +193,7 @@ func (kube Kubernetes) EvictPods(nodeName string) {
 		kube.evictPod(pod)
 	}
 }
+
 func (kube Kubernetes) evictPod(pod v1.Pod) {
 
 	gp := int64(1)
@@ -225,7 +227,6 @@ func (kube Kubernetes) DrainNode(nodeName string) {
 
 func (kube Kubernetes) HardRestart(provider provider.Provider, dryRun bool, nodes map[string]int, currentNode string) {
 	for node := range nodes {
-
 		kube.HardRestartNode(provider, dryRun, node, currentNode)
 	}
 }
@@ -258,6 +259,18 @@ func (kube Kubernetes) HardRestartNode(provider provider.Provider, dryRun bool, 
 	}
 	// do uncordone in any case
 	kube.UncordonNode(node) // uncordone the node
+}
+
+func (kube Kubernetes) GetNodeList() []v1.Node {
+
+	nodeList, e := kube.Kubeclient.CoreV1().Nodes().List(meta.ListOptions{})
+
+	if e != nil {
+		logger.Printfln("%v", e.Error())
+		panic(e)
+
+	}
+	return nodeList.Items
 }
 
 func handlePanicError(err error) {

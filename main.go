@@ -2,16 +2,11 @@ package main
 
 import (
 	. "cluster-monitor-poc/cluster-monitor"
-	"cluster-monitor-poc/entities"
 	kubernetes2 "cluster-monitor-poc/kubernetes"
 	"cluster-monitor-poc/logger"
 	"cluster-monitor-poc/provider/azure"
 	"gopkg.in/alecthomas/kingpin.v2"
-	v1 "k8s.io/api/core/v1"
 	"os"
-	"time"
-
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func main() {
@@ -46,103 +41,15 @@ func main() {
 	creds := azure.FromConfigFile(*azureServicePrincipalConfig)
 	az := azure.InitProvider(creds)
 
-	soft_perdicate := GetAgePredicate(*soft_age)
-	hard_predicate := GetAgePredicate(*hard_age)
+	softPerdicate := GetAgePredicate(*soft_age)
+	hardPredicate := GetAgePredicate(*hard_age)
 
 	logger.Printfln("finally started...")
 
-	go PodsMonitor(collections, kube, soft_perdicate, hard_predicate, collectionDelay, dryRun, namespace, az, currentNode, loopDelay)
-	go NodesMonitor(kube, *dryRun, az, currentNode, *loopDelay, *namespace)
+	settings := PodsMonitorSettings{Kube: kube, LoopDelay: *loopDelay, DryRun: *dryRun, Provider: az, Collections: collections, CollectionDelay: collectionDelay, CurrentNode: currentNode, HardRebootPredicate: hardPredicate, Namespace: namespace, SoftRebootPredicate: softPerdicate}
+	nodesMonitor := NodeMonitorSettings{CurrentNode: currentNode, Provider: az, DryRun: *dryRun, LoopDelay: *loopDelay, Kube: kube}
+
+	go settings.PodsMonitor()
+	go nodesMonitor.NodesMonitor()
 	select {}
-}
-
-func NodesMonitor(kube kubernetes2.Kubernetes, dryRun bool, az azure.Azure, currentNode string, loopDelay int, namespace string) {
-	logger.Printfln("starting nodes monitor")
-	for {
-		logger.Printfln("scanning through all node for not ready status")
-
-		nodeList, e := kube.Kubeclient.CoreV1().Nodes().List(meta.ListOptions{})
-
-		if e != nil {
-			logger.Printfln("%v", e.Error())
-			return
-		}
-		for _, n := range nodeList.Items {
-			for _, condition := range n.Status.Conditions {
-				if condition.Type == v1.NodeReady && condition.Status != v1.ConditionTrue {
-
-					hourAgo := time.Now().Add(-time.Duration(1) * time.Hour)
-					minutesAgo := time.Now().Add(-time.Duration(15) * time.Minute)
-
-					if condition.LastTransitionTime.Time.Before(hourAgo) {
-						logger.Printfln("node %s is not ready, run hard kill", n.Name)
-						kube.HardRestartNode(az, dryRun, n.Name, currentNode)
-
-					} else if condition.LastTransitionTime.Time.Before(minutesAgo) {
-						// this is most likely is a bug because once restart os it will reset time counter
-						logger.Printfln("node %s is not ready, run soft kill", n.Name)
-						kube.SetSoftRebootNodeAnnotation(dryRun, namespace, n.Name)
-					}
-
-				}
-			}
-		}
-
-		logger.Printfln("nodes monitor is sleeping for %v minutes...", loopDelay)
-		time.Sleep(time.Duration(loopDelay) * time.Minute)
-	}
-}
-
-func PodsMonitor(collections *int, kube kubernetes2.Kubernetes, soft_perdicate func(pod entities.Pod) bool, hard_predicate func(pod entities.Pod) bool, collectionDelay *int, dry_run *bool, namespace *string, az azure.Azure, currentNode string, loopDelay *int) {
-	for {
-		logger.Printfln("starting pods monitor")
-		var convertedPods []entities.Pod
-		softKillNodes := make(map[string]int)
-		hardKillNodes := make(map[string]int)
-
-		for i := 0; i < *collections; i++ {
-			pods := kube.GetAllPods()
-
-			for _, pod := range pods {
-				convertedPods = append(convertedPods, kubernetes2.ConvertPod(pod))
-			}
-
-			softKillNodes = GetNodesToKill(convertedPods, softKillNodes, soft_perdicate)
-
-			if len(softKillNodes) == 0 {
-				break
-			}
-			hardKillNodes = GetNodesToKill(convertedPods, hardKillNodes, hard_predicate)
-
-			time.Sleep(time.Duration(*collectionDelay) * time.Second)
-		}
-
-		CleanupFlakyNodes(softKillNodes, *collections)
-		CleanupFlakyNodes(hardKillNodes, *collections)
-
-		CleanSoftNodesFromHardNodes(hardKillNodes, softKillNodes)
-		logger.Printfln("soft candidates: ")
-		for e := range softKillNodes {
-			logger.Printfln(e)
-		}
-
-		logger.Printfln("hard candidates:")
-
-		for e := range hardKillNodes {
-			print(e)
-		}
-
-		kube.SetSoftRebootAnnotation(*dry_run, *namespace, softKillNodes)
-		kube.HardRestart(az, *dry_run, hardKillNodes, currentNode)
-		logger.Printfln("pods monitor is sleeping for %v minutes...", *loopDelay)
-		time.Sleep(time.Duration(*loopDelay) * time.Minute)
-	}
-}
-
-func CleanupFlakyNodes(survivedNodes map[string]int, collections int) {
-	for k, v := range survivedNodes {
-		if v < collections {
-			delete(survivedNodes, k)
-		}
-	}
 }

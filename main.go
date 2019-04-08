@@ -8,6 +8,7 @@ import (
 	"cluster-monitor-poc/provider/azure"
 	"gopkg.in/alecthomas/kingpin.v2"
 	v1 "k8s.io/api/core/v1"
+	"os"
 	"time"
 
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,9 +25,12 @@ func main() {
 	collectionDelay := kingpin.Flag("collection-delay", "Sleep time between rogue pods collections").Default("1").Int()
 
 	namespace := kingpin.Flag("namespace", "namespace to annotate").String()
-	currentNode := kingpin.Flag("currentNode", "node name were current instance is running no to kill ourselves").Short('n').String()
+	currentNode, present := os.LookupEnv("CURRENT_NODE")
+	if !present {
+		panic("environment variable CURRENT_NODE should be present")
+	}
 
-	dry_run := kingpin.Flag("dry-run", "Do not set any annotation and do no do hard restart if specified, only add log statement about action").Default("false").Bool()
+	dryRun := kingpin.Flag("dry-run", "Do not set any annotation and do no do hard restart if specified, only add log statement about action").Default("false").Bool()
 
 	azureServicePrincipalConfig := kingpin.Flag("azure-principal", "azure service principal config file location").Short('f').Default("/etc/kubernetes/azure.json").String()
 
@@ -47,8 +51,8 @@ func main() {
 
 	logger.Printfln("finally started...")
 
-	go PodsMonitor(collections, kube, soft_perdicate, hard_predicate, collectionDelay, dry_run, namespace, az, currentNode, loopDelay)
-	go NodesMonitor(kube, *dry_run, az, *currentNode, *loopDelay, *namespace)
+	go PodsMonitor(collections, kube, soft_perdicate, hard_predicate, collectionDelay, dryRun, namespace, az, currentNode, loopDelay)
+	go NodesMonitor(kube, *dryRun, az, currentNode, *loopDelay, *namespace)
 	select {}
 }
 
@@ -89,7 +93,7 @@ func NodesMonitor(kube kubernetes2.Kubernetes, dryRun bool, az azure.Azure, curr
 	}
 }
 
-func PodsMonitor(collections *int, kube kubernetes2.Kubernetes, soft_perdicate func(pod entities.Pod) bool, hard_predicate func(pod entities.Pod) bool, collectionDelay *int, dry_run *bool, namespace *string, az azure.Azure, currentNode *string, loopDelay *int) {
+func PodsMonitor(collections *int, kube kubernetes2.Kubernetes, soft_perdicate func(pod entities.Pod) bool, hard_predicate func(pod entities.Pod) bool, collectionDelay *int, dry_run *bool, namespace *string, az azure.Azure, currentNode string, loopDelay *int) {
 	for {
 		logger.Printfln("starting pods monitor")
 		var convertedPods []entities.Pod
@@ -129,7 +133,7 @@ func PodsMonitor(collections *int, kube kubernetes2.Kubernetes, soft_perdicate f
 		}
 
 		kube.SetSoftRebootAnnotation(*dry_run, *namespace, softKillNodes)
-		kube.HardRestart(az, *dry_run, hardKillNodes, *currentNode)
+		kube.HardRestart(az, *dry_run, hardKillNodes, currentNode)
 		logger.Printfln("pods monitor is sleeping for %v minutes...", *loopDelay)
 		time.Sleep(time.Duration(*loopDelay) * time.Minute)
 	}

@@ -69,21 +69,15 @@ spec:
         imagePullPolicy: IfNotPresent
         env:
         - name: CURRENT_NODE
-            valueFrom:
-              fieldRef:
-                fieldPath: spec.nodeName
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         command:
         - /app/cluster-monitor-poc
-        - --dry-run
-        # bug: need to propagate node name from env variables instead of parameter
-        # - --node-name:
-        # - valueFrom:
-        #   fieldRef:
-        #     fieldPath: spec.nodeName
         volumeMounts:
-          - name: kubernetes-config
-            mountPath: /etc/kubernetes
-            readOnly: true
+        - name: kubernetes-config
+          mountPath: /etc/kubernetes
+          readOnly: true
         
       volumes:
       - name: kubernetes-config

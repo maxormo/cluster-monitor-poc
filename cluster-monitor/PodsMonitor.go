@@ -15,23 +15,25 @@ type PodsMonitorSettings struct {
 	CurrentNode string
 	LoopDelay   int
 
-	Collections     *int
-	CollectionDelay *int
+	Collections     int
+	CollectionDelay int
 
 	SoftRebootPredicate PodPredicate
 	HardRebootPredicate PodPredicate
 
-	Namespace *string
+	Namespace string
+	Log       logger.Logger
 }
 
 func (s PodsMonitorSettings) PodsMonitor() {
+	s.Log.Printfln("starting pods monitor")
+
 	for {
-		logger.Printfln("starting pods monitor")
 		var convertedPods []entities.Pod
 		softKillNodes := make(map[string]int)
 		hardKillNodes := make(map[string]int)
 
-		for i := 0; i < *s.Collections; i++ {
+		for i := 0; i < s.Collections; i++ {
 			pods := s.Kube.GetAllPods()
 
 			for _, pod := range pods {
@@ -45,27 +47,27 @@ func (s PodsMonitorSettings) PodsMonitor() {
 			}
 			hardKillNodes = GetNodesToKill(convertedPods, hardKillNodes, s.HardRebootPredicate)
 
-			time.Sleep(time.Duration(*s.CollectionDelay) * time.Second)
+			time.Sleep(time.Duration(s.CollectionDelay) * time.Second)
 		}
 
-		CleanupFlakyNodes(softKillNodes, *s.Collections)
-		CleanupFlakyNodes(hardKillNodes, *s.Collections)
+		CleanupFlakyNodes(softKillNodes, s.Collections)
+		CleanupFlakyNodes(hardKillNodes, s.Collections)
 
 		CleanSoftNodesFromHardNodes(hardKillNodes, softKillNodes)
-		logger.Printfln("soft candidates: ")
+		s.Log.Printfln("soft candidates: ")
 		for e := range softKillNodes {
-			logger.Printfln(e)
+			s.Log.Printfln(e)
 		}
 
-		logger.Printfln("hard candidates:")
+		s.Log.Printfln("hard candidates:")
 
 		for e := range hardKillNodes {
 			print(e)
 		}
 
-		s.Kube.SetSoftRebootAnnotation(s.DryRun, *s.Namespace, softKillNodes)
+		s.Kube.SetSoftRebootAnnotation(s.DryRun, s.Namespace, softKillNodes)
 		s.Kube.HardRestart(s.Provider, s.DryRun, hardKillNodes, s.CurrentNode)
-		logger.Printfln("pods monitor is sleeping for %v minutes...", s.LoopDelay)
+		s.Log.Printfln("pods monitor is sleeping for %v minutes...", s.LoopDelay)
 		time.Sleep(time.Duration(s.LoopDelay) * time.Minute)
 	}
 }

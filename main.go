@@ -2,7 +2,7 @@ package main
 
 import (
 	. "cluster-monitor-poc/cluster-monitor"
-	kubernetes2 "cluster-monitor-poc/kubernetes"
+	"cluster-monitor-poc/kubernetes"
 	"cluster-monitor-poc/logger"
 	"cluster-monitor-poc/provider/azure"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -12,8 +12,9 @@ import (
 func main() {
 	kubeconfig := kingpin.Flag("kubeconfig", "Path to kubernetes config, in cluster initialization will be used if missing").Default("").Short('c').String()
 
-	soft_age := kingpin.Flag("soft-reboot-age", "How long pod should be in not Ready state before we initiate soft reboot").Short('s').Default("1").Int()
-	hard_age := kingpin.Flag("hard-reboot-age", "How long pod should be in not Ready state before we initiate hard reboot").Short('h').Default("2").Int()
+	softAge := kingpin.Flag("soft-reboot-age", "How long pod should be in not Ready state before we initiate soft reboot").Short('s').Default("1").Int()
+	hardAge := kingpin.Flag("hard-reboot-age", "How long pod should be in not Ready state before we initiate hard reboot").Short('h').Default("2").Int()
+	restartThreshold := kingpin.Flag("node-restart-threshold", "How long in minutes node should be in not Ready state before we initiate hard reboot").Short('k').Default("30").Int()
 
 	loopDelay := kingpin.Flag("loopDelay", "Sleep time in minutes between iterations").Default("2").Int()
 	collections := kingpin.Flag("collections", "Number of get pods collections to identify rogue pods").Default("3").Int()
@@ -31,23 +32,45 @@ func main() {
 
 	kingpin.Parse()
 
-	var kube kubernetes2.Kubernetes
+	var kube kubernetes.Kubernetes
 
 	if *kubeconfig == "" {
-		kube = kubernetes2.GetKubeClient()
+		kube = kubernetes.GetKubeClient()
 	} else {
-		kube = kubernetes2.GetKubeClientFromConfig(*kubeconfig)
+		kube = kubernetes.GetKubeClientFromConfig(*kubeconfig)
 	}
+
 	creds := azure.FromConfigFile(*azureServicePrincipalConfig)
 	az := azure.InitProvider(creds)
 
-	softPerdicate := GetAgePredicate(*soft_age)
-	hardPredicate := GetAgePredicate(*hard_age)
+	softPerdicate := GetAgePredicate(*softAge)
+	hardPredicate := GetAgePredicate(*hardAge)
 
-	logger.Printfln("finally started...")
+	podsLogger := logger.Logger{Component: "PodsMonitor"}
+	nodesLogger := logger.Logger{Component: "NodesMonitor"}
 
-	settings := PodsMonitorSettings{Kube: kube, LoopDelay: *loopDelay, DryRun: *dryRun, Provider: az, Collections: collections, CollectionDelay: collectionDelay, CurrentNode: currentNode, HardRebootPredicate: hardPredicate, Namespace: namespace, SoftRebootPredicate: softPerdicate}
-	nodesMonitor := NodeMonitorSettings{CurrentNode: currentNode, Provider: az, DryRun: *dryRun, LoopDelay: *loopDelay, Kube: kube}
+	settings := PodsMonitorSettings{
+		Kube:                kube,
+		LoopDelay:           *loopDelay,
+		DryRun:              *dryRun,
+		Provider:            az,
+		Collections:         *collections,
+		CollectionDelay:     *collectionDelay,
+		CurrentNode:         currentNode,
+		HardRebootPredicate: hardPredicate,
+		Namespace:           *namespace,
+		SoftRebootPredicate: softPerdicate,
+		Log:                 podsLogger,
+	}
+	nodesMonitor := NodeMonitorSettings{
+		CurrentNode: currentNode,
+		Provider:    az,
+		DryRun:      *dryRun,
+		LoopDelay:   *loopDelay,
+		Kube:        kube,
+		Log:         nodesLogger,
+		Threshold:   *restartThreshold,
+	}
 
 	go settings.PodsMonitor()
 	go nodesMonitor.NodesMonitor()

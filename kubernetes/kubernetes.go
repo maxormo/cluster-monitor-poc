@@ -1,10 +1,9 @@
 package kubernetes
 
 import (
+	"cluster-monitor-poc/entities"
 	"cluster-monitor-poc/logger"
 	"cluster-monitor-poc/provider"
-
-	"cluster-monitor-poc/entities"
 	"fmt"
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
@@ -20,6 +19,7 @@ import (
 
 type Kubernetes struct {
 	Kubeclient kubernetes.Interface
+	log        logger.Logger
 }
 
 func GetKubeClient() Kubernetes {
@@ -66,14 +66,14 @@ func ConvertPod(pod v1.Pod) entities.Pod {
 
 func (kube Kubernetes) GetAllPods() []v1.Pod {
 
-	logger.Printfln("execute get all pods command")
+	kube.log.Printfln("execute get all pods command")
 	pods, err := kube.Kubeclient.CoreV1().Pods(meta.NamespaceAll).List(meta.ListOptions{})
 
 	handlePanicError(err)
 
 	result := pods.Items
 
-	logger.Printfln("found %v pods", len(result))
+	kube.log.Printfln("found %v pods", len(result))
 	return result
 }
 
@@ -88,11 +88,11 @@ func (kube Kubernetes) addAnnotation(nodeName, namespaceName, key, value string)
 
 	namespace.SetAnnotations(current)
 
-	logger.Printfln("annotating namespace %s to reboot node %s with %s=%s", namespaceName, nodeName, key, value)
+	kube.log.Printfln("annotating namespace %s to reboot node %s with %s=%s", namespaceName, nodeName, key, value)
 
 	_, err = kube.Kubeclient.CoreV1().Namespaces().Update(namespace)
 	if err != nil {
-		logger.Printfln("cannot set annotation %s=%s on the namespace %s for node  %s\n", key, value, namespaceName, nodeName)
+		kube.log.Printfln("cannot set annotation %s=%s on the namespace %s for node  %s\n", key, value, namespaceName, nodeName)
 	}
 }
 
@@ -104,26 +104,28 @@ func (kube Kubernetes) SetSoftRebootAnnotation(dryRun bool, namespace string, no
 
 func (kube Kubernetes) SetSoftRebootNodeAnnotation(dryRun bool, namespace string, node string) {
 	if dryRun {
-		logger.Printfln("running hard reset on node %s", node)
+		kube.log.Printfln("running reboot on node %s", node)
 		return
 	}
 
 	kube.addAnnotation(node, namespace, "Rebooter.Node."+node, "Zombie-Killer.Soft-Kill") // no rolling reboot :(
 }
 
-/// poor man's leader election for who will restart particular node we are or not
+/// poor man's leader election
 /// most likely should be replaced with leaderelection/LeaderElector
 func (kube Kubernetes) SetHardKillLock(node string) bool {
 
-	kNode, err := kube.Kubeclient.CoreV1().Nodes().Get(node, meta.GetOptions{})
-	handlePanicError(err)
-	currentAnnotations := kNode.GetAnnotations()
-
-	now := time.Now().Unix()
+	now := time.Now().Add(time.Duration(10) * time.Minute).Unix()
 
 	for i := 0; i < 10; i++ {
 
 		// 1. get current value
+		kNode, err := kube.Kubeclient.CoreV1().Nodes().Get(node, meta.GetOptions{})
+
+		handlePanicError(err)
+
+		currentAnnotations := kNode.GetAnnotations()
+
 		if value, exists := currentAnnotations["ZombieKiller.HardKill"]; exists {
 
 			existingTimeStamp, err := strconv.ParseInt(value, 10, 64)
@@ -139,11 +141,10 @@ func (kube Kubernetes) SetHardKillLock(node string) bool {
 					return false
 				}
 			}
-
 		}
 
 		// update now value since it is different retry
-		now := time.Now().Unix()
+		now := time.Now().Add(time.Duration(10) * time.Minute).Unix()
 
 		// if we are here then annotation is old or garbage or missing so we overwrite it
 		currentAnnotations["ZombieKiller.HardKill"] = strconv.FormatInt(now, 10)
@@ -156,16 +157,16 @@ func (kube Kubernetes) SetHardKillLock(node string) bool {
 }
 
 func (kube Kubernetes) CordonNode(nodeName string) {
-	logger.Printfln("attempting to cordon node %s", nodeName)
+	kube.log.Printfln("attempting to cordon node %s", nodeName)
 	kube.cordonUncordonNode(nodeName, true)
-	logger.Printfln("node %s condoned", nodeName)
+	kube.log.Printfln("node %s condoned", nodeName)
 }
 
 func (kube Kubernetes) UncordonNode(nodeName string) {
-	logger.Printfln("attempting to uncordon node %s", nodeName)
+	kube.log.Printfln("attempting to uncordon node %s", nodeName)
 
 	kube.cordonUncordonNode(nodeName, false)
-	logger.Printfln("node %s uncordoned", nodeName)
+	kube.log.Printfln("node %s uncordoned", nodeName)
 
 }
 
@@ -188,7 +189,7 @@ func (kube Kubernetes) GetPodsForNode(nodeName string) []v1.Pod {
 
 func (kube Kubernetes) EvictPods(nodeName string) {
 	pods := kube.GetPodsForNode(nodeName)
-	logger.Printfln("will evict %v pods", len(pods))
+	kube.log.Printfln("will evict %v pods", len(pods))
 	for _, pod := range pods {
 		kube.evictPod(pod)
 	}
@@ -203,7 +204,7 @@ func (kube Kubernetes) evictPod(pod v1.Pod) {
 		ObjectMeta:    meta.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name},
 		DeleteOptions: &meta.DeleteOptions{GracePeriodSeconds: &gp},
 	}
-	logger.Printfln("evicting pod %s in namespace %s", pod.Name, pod.Namespace)
+	kube.log.Printfln("evicting pod %s in namespace %s", pod.Name, pod.Namespace)
 
 	err := kube.Kubeclient.CoreV1().Pods(pod.Namespace).Evict(evictionPolicy)
 
@@ -233,12 +234,12 @@ func (kube Kubernetes) HardRestart(provider provider.Provider, dryRun bool, node
 
 func (kube Kubernetes) HardRestartNode(provider provider.Provider, dryRun bool, node string, currentNode string) {
 	if dryRun {
-		logger.Printfln("running hard reset on node %s", node)
+		kube.log.Printfln("running hard reset on node %s", node)
 		return
 	}
 
 	if node == currentNode {
-		logger.Printfln("skipping hard restart of node we are running on %s", node)
+		kube.log.Printfln("skipping hard restart of node we are running on %s", node)
 		// we should not restart ourselves
 		return
 	}
@@ -246,14 +247,14 @@ func (kube Kubernetes) HardRestartNode(provider provider.Provider, dryRun bool, 
 	// check lock
 	if kube.SetHardKillLock(node) {
 		// cordon node and drain/evict all pods
-		logger.Printfln("hard kill lock aquired for node %s", node)
+		kube.log.Printfln("hard kill lock aquired for node %s", node)
 		kube.DrainNode(node)
-		logger.Printfln("node %s drained", node)
+		kube.log.Printfln("node %s drained", node)
 
 		err := provider.RestartNode(node)
-		logger.Printfln("restart node %s command executed", node)
+		kube.log.Printfln("restart node %s command executed", node)
 		if err != nil {
-			logger.Printfln("and return error %s", err.Error())
+			kube.log.Printfln("and return error %s", err.Error())
 		}
 
 	}
@@ -266,11 +267,21 @@ func (kube Kubernetes) GetNodeList() []v1.Node {
 	nodeList, e := kube.Kubeclient.CoreV1().Nodes().List(meta.ListOptions{})
 
 	if e != nil {
-		logger.Printfln("%v", e.Error())
+		kube.log.Printfln("%v", e.Error())
 		panic(e)
 
 	}
 	return nodeList.Items
+}
+
+func (kube Kubernetes) IsReadyNode(node v1.Node) (v1.NodeCondition, bool) {
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady && condition.Status != v1.ConditionTrue {
+			return condition, true
+		}
+	}
+	var empty v1.NodeCondition
+	return empty, false
 }
 
 func handlePanicError(err error) {

@@ -6,6 +6,7 @@ require (
 	github.com/Azure/go-autorest v11.7.0+incompatible
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/dimchansky/utfbom v1.1.0 // indirect
+	github.com/evanphx/json-patch v4.1.0+incompatible // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/golang/mock v1.2.0 // indirect
 	github.com/google/btree v1.0.0 // indirect
@@ -33,5 +34,6 @@ require (
 	k8s.io/apimachinery v0.0.0-20190221213512-86fb29eff628
 	k8s.io/client-go v10.0.0+incompatible
 	k8s.io/klog v0.2.0 // indirect
+	k8s.io/kube-openapi v0.0.0-20190401085232-94e1e7b7574c // indirect
 	sigs.k8s.io/yaml v1.1.0 // indirect
 )

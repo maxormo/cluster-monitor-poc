@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+type PodPredicate = func(pod entities.Pod) bool
+
 func GetAgePredicate(age int) func(pod entities.Pod) bool {
 	return func(pod entities.Pod) bool {
 		return pod.LastTransitionTime.Before(time.Now().Add(-time.Minute * time.Duration(age)))

@@ -35,7 +35,7 @@ func (s NodeMonitorSettings) NodesMonitor() {
 				}
 			}
 		}
-		s.Log.Printfln("nodes monitor is sleeping for %v minutes...", s.LoopDelay)
+		s.Log.Printfln("done for now sleeping for %v minutes...", s.LoopDelay)
 		time.Sleep(time.Duration(s.LoopDelay) * time.Minute)
 	}
 }

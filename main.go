@@ -5,7 +5,10 @@ import (
 	"cluster-monitor-poc/kubernetes"
 	"cluster-monitor-poc/logger"
 	"cluster-monitor-poc/provider/azure"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"net/http"
 	"os"
 )
 
@@ -72,7 +75,28 @@ func main() {
 		Threshold:   *restartThreshold,
 	}
 
+	registerMetrics(kube)
+	registerHealth()
+
 	go settings.PodsMonitor()
 	go nodesMonitor.NodesMonitor()
-	select {}
+	_ = http.ListenAndServe(":8080", nil)
+}
+
+func registerMetrics(kube kubernetes.Kubernetes) {
+	kube.InitMetrics()
+	reg := prometheus.NewRegistry()
+
+	metrics := kube.GetMetrics()
+	reg.MustRegister(metrics...)
+
+	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+
+}
+
+func registerHealth() {
+	noopHandler := func(w http.ResponseWriter, r *http.Request) { _ = r.Body.Close() }
+
+	http.Handle("/healthz", http.HandlerFunc(noopHandler))
+
 }

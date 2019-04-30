@@ -67,7 +67,7 @@ func (s PodsMonitorSettings) PodsMonitor() {
 
 		s.Kube.SetSoftRebootAnnotation(s.DryRun, s.Namespace, softKillNodes)
 		s.Kube.HardRestart(s.Provider, s.DryRun, hardKillNodes, s.CurrentNode)
-		s.Log.Printfln("pods monitor is sleeping for %v minutes...", s.LoopDelay)
+		s.Log.Printfln("done for now sleeping for %v minutes...", s.LoopDelay)
 		time.Sleep(time.Duration(s.LoopDelay) * time.Minute)
 	}
 }

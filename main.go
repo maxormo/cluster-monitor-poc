@@ -43,8 +43,6 @@ func main() {
 		kube = kubernetes.GetKubeClientFromConfig(*kubeconfig)
 	}
 
-	kube.InitMetrics()
-
 	creds := azure.FromConfigFile(*azureServicePrincipalConfig)
 	az := azure.InitProvider(creds)
 
@@ -77,18 +75,28 @@ func main() {
 		Threshold:   *restartThreshold,
 	}
 
-	noopHandler := func(w http.ResponseWriter, r *http.Request) { _ = r.Body.Close() }
+	registerMetrics(kube)
+	registerHealth()
 
+	go settings.PodsMonitor()
+	go nodesMonitor.NodesMonitor()
+	_ = http.ListenAndServe(":8080", nil)
+}
+
+func registerMetrics(kube kubernetes.Kubernetes) {
+	kube.InitMetrics()
 	reg := prometheus.NewRegistry()
 
 	metrics := kube.GetMetrics()
 	reg.MustRegister(metrics...)
 
 	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	http.Handle("/healthz", http.HandlerFunc(noopHandler))
 
-	go settings.PodsMonitor()
-	go nodesMonitor.NodesMonitor()
-	http.ListenAndServe(":2112", nil)
+}
+
+func registerHealth() {
+	noopHandler := func(w http.ResponseWriter, r *http.Request) { _ = r.Body.Close() }
+
+	http.Handle("/healthz", http.HandlerFunc(noopHandler))
 
 }

@@ -5,6 +5,8 @@ import (
 	"cluster-monitor-poc/logger"
 	"cluster-monitor-poc/provider"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,8 +20,26 @@ import (
 )
 
 type Kubernetes struct {
-	Kubeclient kubernetes.Interface
-	log        logger.Logger
+	Kubeclient       kubernetes.Interface
+	log              logger.Logger
+	nodeHardRestarts prometheus.Counter
+	nodeSoftRestarts prometheus.Counter
+}
+
+func (k *Kubernetes) InitMetrics() {
+	k.nodeHardRestarts = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "cluster_monitor_hard_restart",
+		Help: "The total number of node hard restarts",
+	})
+
+	k.nodeSoftRestarts = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "cluster_monitor_soft_restart",
+		Help: "The total number of os reboot",
+	})
+
+}
+func (k Kubernetes) GetMetrics() []prometheus.Collector {
+	return []prometheus.Collector{k.nodeSoftRestarts, k.nodeHardRestarts}
 }
 
 func GetKubeClient() Kubernetes {
@@ -108,7 +128,8 @@ func (kube Kubernetes) SetSoftRebootNodeAnnotation(dryRun bool, namespace string
 		return
 	}
 
-	kube.addAnnotation(node, namespace, "Rebooter.Node."+node, "Zombie-Killer.Soft-Kill") // no rolling reboot :(
+	kube.addAnnotation(node, namespace, "Rebooter.Node."+node, "Zombie-Killer.Soft-Kill")
+	kube.nodeSoftRestarts.Inc()
 }
 
 /// poor man's leader election
@@ -253,6 +274,7 @@ func (kube Kubernetes) HardRestartNode(provider provider.Provider, dryRun bool, 
 
 		err := provider.RestartNode(node)
 		kube.log.Printfln("restart node %s command executed", node)
+		kube.nodeHardRestarts.Inc()
 		if err != nil {
 			kube.log.Printfln("and return error %s", err.Error())
 		}

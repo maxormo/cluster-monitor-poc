@@ -2,11 +2,10 @@ package main
 
 import (
 	. "cluster-monitor-poc/cluster-monitor"
+	"cluster-monitor-poc/entities"
 	"cluster-monitor-poc/kubernetes"
 	"cluster-monitor-poc/logger"
 	"cluster-monitor-poc/provider/azure"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"net/http"
 	"os"
@@ -35,25 +34,19 @@ func main() {
 
 	kingpin.Parse()
 
-	var kube kubernetes.Kubernetes
-
-	if *kubeconfig == "" {
-		kube = kubernetes.GetKubeClient()
-	} else {
-		kube = kubernetes.GetKubeClientFromConfig(*kubeconfig)
-	}
-
 	creds := azure.FromConfigFile(*azureServicePrincipalConfig)
 	az := azure.InitProvider(creds)
 
-	softPerdicate := GetAgePredicate(*softAge)
+	softPredicate := GetAgePredicate(*softAge)
 	hardPredicate := GetAgePredicate(*hardAge)
 
-	podsLogger := logger.Logger{Component: "PodsMonitor"}
-	nodesLogger := logger.Logger{Component: "NodesMonitor"}
+	podsLogger := logger.GetLogger("PodsMonitor")
+	nodesLogger := logger.GetLogger("NodesMonitor")
+
+	metricsClient := entities.InitMetrics()
 
 	settings := PodsMonitorSettings{
-		Kube:                kube,
+		Kube:                kubernetes.GetKubeClient(*kubeconfig, metricsClient, podsLogger),
 		LoopDelay:           *loopDelay,
 		DryRun:              *dryRun,
 		Provider:            az,
@@ -62,7 +55,7 @@ func main() {
 		CurrentNode:         currentNode,
 		HardRebootPredicate: hardPredicate,
 		Namespace:           *namespace,
-		SoftRebootPredicate: softPerdicate,
+		SoftRebootPredicate: softPredicate,
 		Log:                 podsLogger,
 	}
 	nodesMonitor := NodeMonitorSettings{
@@ -70,28 +63,16 @@ func main() {
 		Provider:    az,
 		DryRun:      *dryRun,
 		LoopDelay:   *loopDelay,
-		Kube:        kube,
+		Kube:        kubernetes.GetKubeClient(*kubeconfig, metricsClient, nodesLogger),
 		Log:         nodesLogger,
 		Threshold:   *restartThreshold,
 	}
 
-	registerMetrics(kube)
 	registerHealth()
 
 	go settings.PodsMonitor()
 	go nodesMonitor.NodesMonitor()
 	_ = http.ListenAndServe(":8080", nil)
-}
-
-func registerMetrics(kube kubernetes.Kubernetes) {
-	kube.InitMetrics()
-	reg := prometheus.NewRegistry()
-
-	metrics := kube.GetMetrics()
-	reg.MustRegister(metrics...)
-
-	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-
 }
 
 func registerHealth() {

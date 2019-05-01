@@ -61,6 +61,13 @@ spec:
       - name: cluster-monitor
         image: maxormo/cluster-monitor:latest
         imagePullPolicy: Always # since in active development want to take recent version all the time
+        resources:
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
         env:
         - name: CURRENT_NODE
           valueFrom:
@@ -72,7 +79,6 @@ spec:
         - name: kubernetes-config
           mountPath: /etc/kubernetes
           readOnly: true
-        
       volumes:
       - name: kubernetes-config
         hostPath:

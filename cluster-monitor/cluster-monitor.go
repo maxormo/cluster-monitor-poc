@@ -31,7 +31,7 @@ func GetNodesToKill(pods []entities.Pod, prevNode map[string]int, isOldEnough fu
 		if pod.ReadyCondition != "True" && isOldEnough(pod) {
 			if _, exists := NotZombieReasons[pod.Reason]; !exists {
 				nodes[pod.Node] = prevNode[pod.Node] + 1
-				fmt.Println(pod)
+				fmt.Println(pod) //TODO: why is it here?
 			}
 		}
 	}

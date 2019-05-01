@@ -5,8 +5,9 @@ import (
 	"cluster-monitor-poc/logger"
 	"cluster-monitor-poc/provider"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"strconv"
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,56 +16,43 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"strconv"
-	"time"
 )
 
+//TODO: need to extract interface to have proper dry run and incapsulation
 type Kubernetes struct {
-	Kubeclient       kubernetes.Interface
-	log              logger.Logger
-	nodeHardRestarts prometheus.Counter
-	nodeSoftRestarts prometheus.Counter
+	Kubeclient    kubernetes.Interface
+	metricsClient entities.MetricsClient
+	log           logger.Logger
 }
 
-func (k *Kubernetes) InitMetrics() {
-	k.nodeHardRestarts = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "cluster_monitor_hard_restart",
-		Help: "The total number of node hard restarts",
-	})
+func GetKubeClient(kubeconfig string, client entities.MetricsClient, log logger.Logger) Kubernetes {
 
-	k.nodeSoftRestarts = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "cluster_monitor_soft_restart",
-		Help: "The total number of os reboot",
-	})
-
-}
-func (k Kubernetes) GetMetrics() []prometheus.Collector {
-	return []prometheus.Collector{k.nodeSoftRestarts, k.nodeHardRestarts}
-}
-
-func GetKubeClient() Kubernetes {
-	config, err := rest.InClusterConfig()
-
-	handlePanicError(err)
-
-	return getKubeclient(config)
-}
-
-func GetKubeClientFromConfig(kubeconfig string) Kubernetes {
+	if kubeconfig == "" {
+		return getInClusterKubeClient(client, log)
+	}
 
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 
 	handlePanicError(err)
 
-	return getKubeclient(config)
+	return getKubeclient(config, client, log)
 }
 
-func getKubeclient(config *rest.Config) Kubernetes {
+func getInClusterKubeClient(client entities.MetricsClient, log logger.Logger) Kubernetes {
+
+	config, err := rest.InClusterConfig()
+
+	handlePanicError(err)
+
+	return getKubeclient(config, client, log)
+}
+
+func getKubeclient(config *rest.Config, client entities.MetricsClient, log logger.Logger) Kubernetes {
 	clientset, err := kubernetes.NewForConfig(config)
 
 	handlePanicError(err)
 
-	return Kubernetes{Kubeclient: clientset}
+	return Kubernetes{Kubeclient: clientset, metricsClient: client, log: log}
 }
 
 func ConvertPod(pod v1.Pod) entities.Pod {
@@ -129,12 +117,12 @@ func (kube Kubernetes) SetSoftRebootNodeAnnotation(dryRun bool, namespace string
 	}
 
 	kube.addAnnotation(node, namespace, "Rebooter.Node."+node, "Zombie-Killer.Soft-Kill")
-	kube.nodeSoftRestarts.Inc()
+	kube.metricsClient.IncSoftRestart()
 }
 
 /// poor man's leader election
 /// most likely should be replaced with leaderelection/LeaderElector
-func (kube Kubernetes) SetHardKillLock(node string) bool {
+func (kube Kubernetes) setHardKillLock(node string) bool {
 
 	now := time.Now().Add(time.Duration(10) * time.Minute).Unix()
 
@@ -202,14 +190,14 @@ func (kube Kubernetes) cordonUncordonNode(nodeName string, isCordone bool) {
 	handlePanicError(err)
 }
 
-func (kube Kubernetes) GetPodsForNode(nodeName string) []v1.Pod {
+func (kube Kubernetes) getPodsForNode(nodeName string) []v1.Pod {
 	pods, err := kube.Kubeclient.CoreV1().Pods(meta.NamespaceAll).List(meta.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String()})
 	handlePanicError(err)
 	return pods.Items
 }
 
 func (kube Kubernetes) EvictPods(nodeName string) {
-	pods := kube.GetPodsForNode(nodeName)
+	pods := kube.getPodsForNode(nodeName)
 	kube.log.Printfln("will evict %v pods", len(pods))
 	for _, pod := range pods {
 		kube.evictPod(pod)
@@ -218,13 +206,14 @@ func (kube Kubernetes) EvictPods(nodeName string) {
 
 func (kube Kubernetes) evictPod(pod v1.Pod) {
 
-	gp := int64(1)
+	gracePeriod := int64(1)
 
 	evictionPolicy := &policy.Eviction{
 
 		ObjectMeta:    meta.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name},
-		DeleteOptions: &meta.DeleteOptions{GracePeriodSeconds: &gp},
+		DeleteOptions: &meta.DeleteOptions{GracePeriodSeconds: &gracePeriod},
 	}
+
 	kube.log.Printfln("evicting pod %s in namespace %s", pod.Name, pod.Namespace)
 
 	err := kube.Kubeclient.CoreV1().Pods(pod.Namespace).Evict(evictionPolicy)
@@ -265,8 +254,8 @@ func (kube Kubernetes) HardRestartNode(provider provider.Provider, dryRun bool, 
 		return
 	}
 
-	// check lock
-	if kube.SetHardKillLock(node) {
+	//TODO: need to set cluster autoscaler annotation to prevent scaledown
+	if kube.setHardKillLock(node) {
 		// cordon node and drain/evict all pods
 		kube.log.Printfln("hard kill lock aquired for node %s", node)
 		kube.DrainNode(node)
@@ -274,14 +263,14 @@ func (kube Kubernetes) HardRestartNode(provider provider.Provider, dryRun bool, 
 
 		err := provider.RestartNode(node)
 		kube.log.Printfln("restart node %s command executed", node)
-		kube.nodeHardRestarts.Inc()
+		kube.metricsClient.IncHardRestart()
 		if err != nil {
 			kube.log.Printfln("and return error %s", err.Error())
 		}
 
 	}
-	// do uncordone in any case
-	kube.UncordonNode(node) // uncordone the node
+	// do uncordon in any case
+	kube.UncordonNode(node) // uncordon the node
 }
 
 func (kube Kubernetes) GetNodeList() []v1.Node {
@@ -298,7 +287,7 @@ func (kube Kubernetes) GetNodeList() []v1.Node {
 
 func (kube Kubernetes) IsReadyNode(node v1.Node) (v1.NodeCondition, bool) {
 	for _, condition := range node.Status.Conditions {
-		if condition.Type == v1.NodeReady && condition.Status != v1.ConditionTrue {
+		if condition.Type == v1.NodeReady && condition.Status == v1.ConditionTrue {
 			return condition, true
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+//TODO: extract interface and incapsulate initialization of the struct in constructor like object to avoid partial init
 type PodsMonitorSettings struct {
 	Kube        kubernetes.Kubernetes
 	DryRun      bool

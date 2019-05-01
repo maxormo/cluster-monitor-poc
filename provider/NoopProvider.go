@@ -2,9 +2,14 @@ package provider
 
 import "fmt"
 
-type Noop struct {
+type noop struct {
 }
 
-func (noop Noop) RestartNode(node_name string) {
+func (noop noop) RestartNode(node_name string) error {
 	fmt.Printf("restarting node %s\n", node_name)
+	return nil
+}
+
+func NoopProvider() Provider {
+	return noop{}
 }

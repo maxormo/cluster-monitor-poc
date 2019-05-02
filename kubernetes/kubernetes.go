@@ -285,9 +285,9 @@ func (kube Kubernetes) GetNodeList() []v1.Node {
 	return nodeList.Items
 }
 
-func (kube Kubernetes) IsReadyNode(node v1.Node) (v1.NodeCondition, bool) {
+func (kube Kubernetes) IsNotReadyNode(node v1.Node) (v1.NodeCondition, bool) {
 	for _, condition := range node.Status.Conditions {
-		if condition.Type == v1.NodeReady && condition.Status == v1.ConditionTrue {
+		if condition.Type == v1.NodeReady && condition.Status != v1.ConditionTrue {
 			return condition, true
 		}
 	}

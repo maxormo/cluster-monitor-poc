@@ -106,7 +106,7 @@ func TestNodeIsNotReady(t *testing.T) {
 
 	kubernetes := getFake()
 
-	_, b := kubernetes.IsReadyNode(v1.Node{ObjectMeta: v12.ObjectMeta{Name: "one"}})
+	_, b := kubernetes.IsNotReadyNode(v1.Node{ObjectMeta: v12.ObjectMeta{Name: "one"}})
 
 	if b {
 		t.Fail()
@@ -119,14 +119,10 @@ func TestNodeIsReady(t *testing.T) {
 	var conditions []v1.NodeCondition
 	conditions = append(conditions, v1.NodeCondition{Type: v1.NodeReady, Status: v1.ConditionTrue})
 
-	c, b := kubernetes.IsReadyNode(v1.Node{ObjectMeta: v12.ObjectMeta{Name: "one"}, Status: v1.NodeStatus{Conditions: conditions}})
+	_, b := kubernetes.IsNotReadyNode(v1.Node{ObjectMeta: v12.ObjectMeta{Name: "one"}, Status: v1.NodeStatus{Conditions: conditions}})
 
-	if !b {
+	if b {
 		t.Errorf("node is expected to be ready")
-	}
-
-	if c.Type != v1.NodeReady || c.Status != v1.ConditionTrue {
-		t.Errorf("method is expect to return ready condition with true status")
 	}
 }
 

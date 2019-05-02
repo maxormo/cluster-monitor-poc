@@ -27,7 +27,7 @@ func (s NodeMonitorSettings) NodesMonitor() {
 		nodeList := s.Kube.GetNodeList()
 
 		for _, n := range nodeList {
-			if condition, isReady := s.Kube.IsReadyNode(n); isReady {
+			if condition, isNotReady := s.Kube.IsNotReadyNode(n); isNotReady {
 				minutesAgo := time.Now().Add(-time.Duration(s.Threshold) * time.Minute)
 
 				if condition.LastTransitionTime.Time.Before(minutesAgo) {

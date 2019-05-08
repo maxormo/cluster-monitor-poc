@@ -13,7 +13,5 @@ type Pod struct {
 }
 
 func (p Pod) String() string {
-
 	return p.Name + " " + p.Node + " " + p.ReadyCondition + " " + p.Reason + "" + p.LastTransitionTime.String()
-
 }

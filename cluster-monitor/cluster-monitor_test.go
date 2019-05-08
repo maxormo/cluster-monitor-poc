@@ -2,7 +2,10 @@ package cluster_monitor
 
 import (
 	. "cluster-monitor-poc/entities"
+	"cluster-monitor-poc/kubernetes"
 	"github.com/stretchr/testify/assert"
+	core "k8s.io/api/core/v1"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -35,4 +38,35 @@ func TestGetSoftKillNodes(t *testing.T) {
 		return pod.LastTransitionTime.Before(time.Now().Add(-time.Second * 10))
 	})
 	assert.ObjectsAreEqual(1, len(nodes))
+}
+
+func TestParseConditions(t *testing.T) {
+	cases := []struct {
+		name       string
+		conditions []string
+		expect     []kubernetes.Condition
+	}{
+		{
+			name:       "OldFormat=Ready",
+			conditions: []string{"Ready=True,1s,Drain"},
+			expect:     []kubernetes.Condition{{"Ready", "True", time.Second * 1, "Drain"}},
+		},
+		{
+			name:       "Mixed",
+			conditions: []string{"Ready=False,30m,Drain", "OutOfDisk=True,10m,Restart"},
+			expect: []kubernetes.Condition{
+				{core.NodeConditionType("Ready"), core.ConditionStatus("False"), 30 * time.Minute, "Drain"},
+				{core.NodeConditionType("OutOfDisk"), core.ConditionStatus("True"), 10 * time.Minute, "Restart"},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			parsed := kubernetes.ParseConditions(tc.conditions)
+			if !reflect.DeepEqual(tc.expect, parsed) {
+				t.Errorf("expect %v, got: %v", tc.expect, parsed)
+			}
+		})
+	}
 }

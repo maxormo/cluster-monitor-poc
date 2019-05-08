@@ -23,6 +23,7 @@ func main() {
 	collectionDelay := kingpin.Flag("collection-delay", "Sleep time between rogue pods collections").Default("1").Int()
 
 	namespace := kingpin.Flag("namespace", "namespace to annotate").String()
+
 	currentNode, present := os.LookupEnv("CURRENT_NODE")
 	if !present {
 		panic("environment variable CURRENT_NODE should be present")
@@ -31,6 +32,11 @@ func main() {
 	dryRun := kingpin.Flag("dry-run", "Do not set any annotation and do no do hard restart if specified, only add log statement about action").Default("false").Bool()
 
 	azureServicePrincipalConfig := kingpin.Flag("azure-principal", "azure service principal config file location").Short('f').Default("/etc/kubernetes/azure.json").String()
+
+	conditions := kingpin.Arg("node-conditions", "Nodes for which any of these conditions are true will be cordoned and drained."+
+		"Example:"+
+		"	Ready=False,30m,Drain \n"+
+		"	MemoryLeak=False,10m,Reboot").Required().Strings()
 
 	kingpin.Parse()
 
@@ -46,7 +52,7 @@ func main() {
 	metricsClient := entities.InitMetrics()
 
 	settings := PodsMonitorSettings{
-		Kube:                kubernetes.GetKubeClient(*kubeconfig, metricsClient, podsLogger),
+		Kube:                kubernetes.GetKubeClient(*kubeconfig, metricsClient, podsLogger, az, currentNode),
 		LoopDelay:           *loopDelay,
 		DryRun:              *dryRun,
 		Provider:            az,
@@ -63,9 +69,10 @@ func main() {
 		Provider:    az,
 		DryRun:      *dryRun,
 		LoopDelay:   *loopDelay,
-		Kube:        kubernetes.GetKubeClient(*kubeconfig, metricsClient, nodesLogger),
+		Kube:        kubernetes.GetKubeClient(*kubeconfig, metricsClient, nodesLogger, az, currentNode),
 		Log:         nodesLogger,
 		Threshold:   *restartThreshold,
+		Conditions:  kubernetes.ParseConditions(*conditions),
 	}
 
 	registerHealth()

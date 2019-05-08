@@ -9,12 +9,12 @@ import (
 	"os"
 )
 
-type Azure struct {
+type azure struct {
 	account    ServicePrincipal
 	authorizer autorest.Authorizer
 }
 
-func InitProvider(principal ServicePrincipal) Azure {
+func InitProvider(principal ServicePrincipal) azure {
 	initEnv(principal)
 	var authorizer autorest.Authorizer
 
@@ -22,7 +22,7 @@ func InitProvider(principal ServicePrincipal) Azure {
 	if authorizer, err = auth.NewAuthorizerFromEnvironment(); err != nil {
 		panic(err)
 	}
-	azure := Azure{account: principal, authorizer: authorizer}
+	azure := azure{account: principal, authorizer: authorizer}
 	return azure
 }
 
@@ -32,10 +32,11 @@ func initEnv(creds ServicePrincipal) {
 	os.Setenv("AZURE_CLIENT_SECRET", creds.AadSecret)
 }
 
-func (azure Azure) RestartNode(nodeName string) error {
+func (azure azure) RestartNode(nodeName string) error {
 	vmClient := azure.getVMClient()
 	ctx := context.Background()
-	future, err := vmClient.Restart(ctx, azure.account.ResourceGroup, nodeName)
+
+	future, err := vmClient.Restart(ctx, azure.account.ResourceGroup, azure.account.ScaleSetName, nodeName)
 	if err != nil {
 		return fmt.Errorf("cannot restart vm: %v", err)
 	}
@@ -49,8 +50,9 @@ func (azure Azure) RestartNode(nodeName string) error {
 	return err
 }
 
-func (azure Azure) getVMClient() compute.VirtualMachinesClient {
-	vmClient := compute.NewVirtualMachinesClient(azure.account.Subscription)
+func (azure azure) getVMClient() compute.VirtualMachineScaleSetVMsClient {
+
+	vmClient := compute.NewVirtualMachineScaleSetVMsClient(azure.account.Subscription)
 	vmClient.Authorizer = azure.authorizer
 	return vmClient
 }

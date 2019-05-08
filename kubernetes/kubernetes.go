@@ -342,7 +342,10 @@ func (kube Kubernetes) DrainNode(nodeName string) error {
 
 func (kube Kubernetes) HardRestartNodes(nodes map[string]int) {
 	for node := range nodes {
-		kube.HardRestartNode(node)
+		err := kube.HardRestartNode(node)
+		if err != nil {
+			kube.log.PrintErr(err)
+		}
 	}
 }
 

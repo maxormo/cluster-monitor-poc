@@ -56,5 +56,5 @@ func (s NodeMonitorSettings) NodesMonitor() {
 func isMatch(condition v1.NodeCondition, c kubernetes.Condition) bool {
 	return strings.EqualFold(string(condition.Type), string(c.ConditionType)) &&
 		strings.EqualFold(string(condition.Status), string(c.ConditionValue)) &&
-		time.Now().Add(-c.TimeInEffect).Before(condition.LastTransitionTime.Time)
+		condition.LastTransitionTime.Time.Before(time.Now().Add(-c.TimeInEffect))
 }

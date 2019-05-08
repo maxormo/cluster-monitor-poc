@@ -68,7 +68,7 @@ func TestHardRestartNode(t *testing.T) {
 
 	kubernetes := getFake()
 
-	kubernetes.HardRestartNode("NodeNeedToRestart")
+	_ = kubernetes.HardRestartNode("NodeNeedToRestart")
 
 	// verify that we at least are not failing
 	//TODO: add provider mock and verify execution of the restart method
@@ -78,7 +78,7 @@ func TestHardRestartNodeForSelf(t *testing.T) {
 
 	kubernetes := getFake()
 
-	kubernetes.HardRestartNode("NodeToRestart")
+	_ = kubernetes.HardRestartNode("NodeToRestart")
 
 	// verify that we at least are not failing
 	//TODO: add provider mock and verify that we are not restarting itself
@@ -88,7 +88,7 @@ func TestDrainNode(t *testing.T) {
 
 	kubernetes := getFake(&v1.Node{ObjectMeta: v12.ObjectMeta{Name: "NodeToDrain"}})
 
-	kubernetes.DrainNode("NodeToDrain")
+	_ = kubernetes.DrainNode("NodeToDrain")
 
 	// verify that we at least are not failing
 	//TODO: add assertions

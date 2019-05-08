@@ -49,14 +49,14 @@ func TestParseConditions(t *testing.T) {
 		{
 			name:       "OldFormat=Ready",
 			conditions: []string{"Ready=True,1s,Drain"},
-			expect:     []kubernetes.Condition{{"Ready", "True", time.Second * 1, "Drain"}},
+			expect:     []kubernetes.Condition{{ConditionType: "Ready", ConditionValue: "True", TimeInEffect: time.Second * 1, Action: "Drain"}},
 		},
 		{
 			name:       "Mixed",
 			conditions: []string{"Ready=False,30m,Drain", "OutOfDisk=True,10m,Restart"},
 			expect: []kubernetes.Condition{
-				{core.NodeConditionType("Ready"), core.ConditionStatus("False"), 30 * time.Minute, "Drain"},
-				{core.NodeConditionType("OutOfDisk"), core.ConditionStatus("True"), 10 * time.Minute, "Restart"},
+				{ConditionType: core.NodeConditionType("Ready"), ConditionValue: core.ConditionStatus("False"), TimeInEffect: 30 * time.Minute, Action: "Drain"},
+				{ConditionType: core.NodeConditionType("OutOfDisk"), ConditionValue: core.ConditionStatus("True"), TimeInEffect: 10 * time.Minute, Action: "Restart"},
 			},
 		},
 	}

@@ -16,7 +16,7 @@ var (
 )
 
 func getFake(objects ...runtime.Object) Kubernetes {
-	node := &v1.Node{ObjectMeta: v12.ObjectMeta{Name: "NodeToRestart", Annotations: map[string]string{}}}
+	node := &v1.Node{ObjectMeta: v12.ObjectMeta{Name: "NodeNeedToRestart", Annotations: map[string]string{}}}
 
 	objects = append(objects, node)
 
@@ -25,6 +25,8 @@ func getFake(objects ...runtime.Object) Kubernetes {
 		Kubeclient:    fake.NewSimpleClientset(objects...),
 		metricsClient: mertr,
 		log:           logger.GetLogger("test"),
+		currentNode:   "NodeToRestart",
+		provider:      provider.NoopProvider(),
 	}
 }
 
@@ -66,7 +68,7 @@ func TestHardRestartNode(t *testing.T) {
 
 	kubernetes := getFake()
 
-	kubernetes.HardRestartNode(provider.NoopProvider(), false, "NodeToRestart", "currentNode")
+	kubernetes.HardRestartNode("NodeNeedToRestart")
 
 	// verify that we at least are not failing
 	//TODO: add provider mock and verify execution of the restart method
@@ -76,7 +78,7 @@ func TestHardRestartNodeForSelf(t *testing.T) {
 
 	kubernetes := getFake()
 
-	kubernetes.HardRestartNode(provider.NoopProvider(), false, "NodeToRestart", "NodeToRestart")
+	kubernetes.HardRestartNode("NodeToRestart")
 
 	// verify that we at least are not failing
 	//TODO: add provider mock and verify that we are not restarting itself

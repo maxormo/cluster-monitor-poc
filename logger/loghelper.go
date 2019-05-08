@@ -4,6 +4,7 @@ import "fmt"
 
 type Logger interface {
 	Printfln(format string, a ...interface{})
+	PrintErr(err error)
 }
 
 type logger struct {
@@ -17,4 +18,12 @@ func GetLogger(component string) Logger {
 func (log logger) Printfln(format string, a ...interface{}) {
 	format = "[" + log.component + "] " + format + "\n"
 	fmt.Printf(format, a...)
+}
+
+func (log logger) PrintErr(err error) {
+	if err == nil {
+		return
+	}
+	format := "[" + log.component + "] %s\n"
+	fmt.Printf(format, err.Error())
 }

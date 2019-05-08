@@ -6,7 +6,12 @@ import (
 )
 
 type ServicePrincipal struct {
-	AadId, AadSecret, TenantId, Subscription, ResourceGroup string
+	AadId         string
+	AadSecret     string
+	TenantId      string
+	Subscription  string
+	ScaleSetName  string
+	ResourceGroup string
 }
 
 func FromConfigFile(file string) ServicePrincipal {
@@ -28,5 +33,7 @@ func FromConfigFile(file string) ServicePrincipal {
 		AadId:         values["aadClientId"].(string),
 		AadSecret:     values["aadClientSecret"].(string),
 		TenantId:      values["tenantId"].(string),
-		ResourceGroup: values["resourceGroup"].(string)}
+		ResourceGroup: values["resourceGroup"].(string),
+		ScaleSetName:  values["primaryScaleSetName"].(string),
+	}
 }

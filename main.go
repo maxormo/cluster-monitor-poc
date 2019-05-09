@@ -9,6 +9,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
@@ -78,6 +79,10 @@ func main() {
 	registerHealth()
 
 	go settings.PodsMonitor()
+	// defer starting another thread beacause of getting alot of collision between each other
+	// in modifying/reading the same kubernetes resources
+	// proper solution will be to introduce retries on all updated kubernetes operations
+	time.Sleep(10 * time.Second)
 	go nodesMonitor.NodesMonitor()
 	_ = http.ListenAndServe(":8080", nil)
 }

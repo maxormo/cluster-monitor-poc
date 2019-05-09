@@ -7,6 +7,7 @@ import (
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"os"
+	"strings"
 )
 
 type azure struct {
@@ -35,8 +36,12 @@ func initEnv(creds ServicePrincipal) {
 func (azure azure) RestartNode(nodeName string) error {
 	vmClient := azure.getVMClient()
 	ctx := context.Background()
+	nodeId, err := azure.findNodeId(vmClient, nodeName)
+	if err != nil {
+		return fmt.Errorf("cannot find vm id : %v", err)
+	}
 
-	future, err := vmClient.Restart(ctx, azure.account.ResourceGroup, azure.account.ScaleSetName, nodeName)
+	future, err := vmClient.Restart(ctx, azure.account.ResourceGroup, azure.account.ScaleSetName, nodeId)
 	if err != nil {
 		return fmt.Errorf("cannot restart vm: %v", err)
 	}
@@ -48,6 +53,22 @@ func (azure azure) RestartNode(nodeName string) error {
 
 	_, err = future.Result(vmClient)
 	return err
+}
+
+func (azure azure) findNodeId(client compute.VirtualMachineScaleSetVMsClient, nodeName string) (string, error) {
+	ctx := context.Background()
+	result, err := client.List(ctx, azure.account.ResourceGroup, azure.account.ScaleSetName, "", "", "")
+	if err != nil {
+		return "", err
+	}
+
+	for _, value := range result.Values() {
+		if strings.EqualFold(nodeName, *value.OsProfile.ComputerName) {
+			return *value.InstanceID, nil
+		}
+	}
+	return "", fmt.Errorf("cannot find %s in vmss %s", nodeName, azure.account.ScaleSetName)
+
 }
 
 func (azure azure) getVMClient() compute.VirtualMachineScaleSetVMsClient {

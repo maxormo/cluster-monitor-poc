@@ -24,6 +24,6 @@ func (log logger) PrintErr(err error) {
 	if err == nil {
 		return
 	}
-	format := "[" + log.component + "] %s\n"
+	format := "[" + log.component + "][error] %s\n"
 	fmt.Printf(format, err.Error())
 }

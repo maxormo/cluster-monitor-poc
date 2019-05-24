@@ -8,7 +8,7 @@ func TestMetricsClient(t *testing.T) {
 
 	mc := InitMetrics()
 
-	mc.IncHardRestart()
-	mc.IncSoftRestart()
+	mc.IncHardRestart("one")
+	mc.IncSoftRestart("two")
 
 }

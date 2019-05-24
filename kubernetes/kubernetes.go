@@ -237,7 +237,7 @@ func (kube Kubernetes) setSoftRebootNodeAnnotation(dryRun bool, namespace string
 	}
 
 	kube.addNamespaceAnnotation(node, namespace, "Rebooter.Node."+node, "Zombie-Killer.Soft-Kill")
-	kube.metricsClient.IncSoftRestart()
+	kube.metricsClient.IncSoftRestart(node)
 }
 
 /// poor man's leader election
@@ -431,7 +431,7 @@ func (kube Kubernetes) HardRestartNode(node string) error {
 		err = kube.provider.RestartNode(node)
 
 		kube.log.Printfln("restart node %s command executed", node)
-		kube.metricsClient.IncHardRestart()
+		kube.metricsClient.IncHardRestart(node)
 
 		if err != nil {
 			kube.log.Printfln("and return error %s", err.Error())

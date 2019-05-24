@@ -105,12 +105,23 @@ func getKubeclient(config *rest.Config, client entities.MetricsClient, log logge
 
 	handlePanicError(err)
 
-	return Kubernetes{
+	kubeClient := Kubernetes{
 		Kubeclient:    clientset,
 		metricsClient: client,
 		log:           log,
 		provider:      provider,
 		currentNode:   currentNode,
+	}
+
+	initNodeLabels(kubeClient, client)
+
+	return kubeClient
+}
+
+func initNodeLabels(kubeClient Kubernetes, metricsClient entities.MetricsClient) {
+	nodes := kubeClient.GetNodeList()
+	for _, node := range nodes {
+		metricsClient.InitNodeLabel(node.Name)
 	}
 }
 

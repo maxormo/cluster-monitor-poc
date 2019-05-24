@@ -65,12 +65,15 @@ func main() {
 		SoftRebootPredicate: softPredicate,
 		Log:                 podsLogger,
 	}
+
+	nodeMonitorKubeClient := kubernetes.GetKubeClient(*kubeconfig, metricsClient, nodesLogger, az, currentNode)
+
 	nodesMonitor := NodeMonitorSettings{
 		CurrentNode: currentNode,
 		Provider:    az,
 		DryRun:      *dryRun,
 		LoopDelay:   *loopDelay,
-		Kube:        kubernetes.GetKubeClient(*kubeconfig, metricsClient, nodesLogger, az, currentNode),
+		Kube:        nodeMonitorKubeClient,
 		Log:         nodesLogger,
 		Threshold:   *restartThreshold,
 		Conditions:  kubernetes.ParseConditions(*conditions),

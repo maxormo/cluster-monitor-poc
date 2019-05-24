@@ -8,25 +8,27 @@ import (
 )
 
 type MetricsClient interface {
-	IncSoftRestart()
-	IncHardRestart()
+	IncSoftRestart(node string)
+	IncHardRestart(node string)
+	InitNodeLabel(node string)
 }
 
 type metricsClient struct {
-	nodeHardRestarts prometheus.Counter
-	nodeSoftRestarts prometheus.Counter
+	nodeHardRestarts prometheus.CounterVec
+	nodeSoftRestarts prometheus.CounterVec
 }
 
 func InitMetrics() MetricsClient {
 	mc := metricsClient{
-		nodeSoftRestarts: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "cluster_monitor_hard_restart",
-			Help: "The total number of node hard restarts",
-		}),
-		nodeHardRestarts: promauto.NewCounter(prometheus.CounterOpts{
+		nodeSoftRestarts: *promauto.NewCounterVec(prometheus.CounterOpts{
 			Name: "cluster_monitor_soft_restart",
+			Help: "The total number of node hard restarts",
+		}, []string{"node"}),
+
+		nodeHardRestarts: *promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "cluster_monitor_hard_restart",
 			Help: "The total number of os reboot",
-		}),
+		}, []string{"node"}),
 	}
 
 	reg := prometheus.NewRegistry()
@@ -37,10 +39,16 @@ func InitMetrics() MetricsClient {
 	return mc
 }
 
-func (m metricsClient) IncSoftRestart() {
-	m.nodeSoftRestarts.Inc()
+func (m metricsClient) IncSoftRestart(node string) {
+	m.nodeSoftRestarts.WithLabelValues(node).Inc()
 }
 
-func (m metricsClient) IncHardRestart() {
-	m.nodeHardRestarts.Inc()
+func (m metricsClient) IncHardRestart(node string) {
+	m.nodeHardRestarts.WithLabelValues(node).Inc()
+}
+
+func (m metricsClient) InitNodeLabel(node string) {
+	m.nodeSoftRestarts.WithLabelValues(node).Add(0)
+
+	m.nodeHardRestarts.WithLabelValues(node).Add(0)
 }

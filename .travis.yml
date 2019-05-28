@@ -23,7 +23,8 @@ jobs:
       before_script:
         - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
       script:
-        - docker build . -t maxormo/cluster-monitor
+        - VERSION=$(git rev-parse --short HEAD)
+        - docker build . -t "maxormo/cluster-monitor:${VERSION}" -t maxormo/cluster-monitor:latest
         - docker push maxormo/cluster-monitor
 
 

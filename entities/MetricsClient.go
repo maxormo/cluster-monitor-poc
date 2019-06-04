@@ -22,10 +22,9 @@ const (
 )
 
 type metricsClient struct {
-	metrics          []prometheus.Collector
 	nodeHardRestarts prometheus.CounterVec
 	nodeSoftRestarts prometheus.CounterVec
-	nodeContditions  prometheus.GaugeVec
+	nodeConditions   prometheus.GaugeVec
 }
 
 func InitMetrics() MetricsClient {
@@ -41,14 +40,14 @@ func InitMetrics() MetricsClient {
 			Help: "The total number of os reboot",
 		}, []string{"node"}),
 
-		nodeContditions: *promauto.NewGaugeVec(prometheus.GaugeOpts{
+		nodeConditions: *promauto.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cluster_monitor_node_condition",
 			Help: "Kubernetes node conditions state",
 		}, []string{"node", "condition"}),
 	}
 
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(mc.nodeHardRestarts, mc.nodeSoftRestarts, mc.nodeContditions)
+	reg.MustRegister(mc.nodeHardRestarts, mc.nodeSoftRestarts, mc.nodeConditions)
 
 	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
@@ -70,5 +69,5 @@ func (m metricsClient) InitNodeLabel(node string) {
 }
 
 func (m metricsClient) UpdateNodeCondition(node, condition string, value NodeConditionStatus) {
-	m.nodeContditions.WithLabelValues(node, condition).Set(value)
+	m.nodeConditions.WithLabelValues(node, condition).Set(value)
 }

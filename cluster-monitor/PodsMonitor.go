@@ -9,7 +9,7 @@ import (
 )
 
 //TODO: extract interface and incapsulate initialization of the struct in constructor like object to avoid partial init
-type PodsMonitorSettings struct {
+type PodsMonitor struct {
 	Kube        kubernetes.Kubernetes
 	DryRun      bool
 	Provider    provider.Provider
@@ -26,7 +26,7 @@ type PodsMonitorSettings struct {
 	Log       logger.Logger
 }
 
-func (s PodsMonitorSettings) PodsMonitor() {
+func (s PodsMonitor) PodsMonitor() {
 	s.Log.Printfln("starting pods monitor")
 
 	for {

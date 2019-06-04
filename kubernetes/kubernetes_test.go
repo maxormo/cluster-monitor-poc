@@ -4,6 +4,7 @@ import (
 	"cluster-monitor-poc/entities"
 	"cluster-monitor-poc/logger"
 	"cluster-monitor-poc/provider"
+	"github.com/stretchr/testify/assert"
 	"k8s.io/api/core/v1"
 	v12 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -128,24 +129,8 @@ func TestNodeIsReady(t *testing.T) {
 	}
 }
 
-// just an example of negative test with panic
-//func TestGetNodeListShouldFail(t *testing.T) {
-//	defer func() {
-//		if r := recover(); r == nil {
-//			t.Errorf("The code did not panic")
-//		} else if r.(error).Error() != "hello" {
-//			t.Errorf("expecting correct error propagation")
-//		}
-//	}()
-//	node := &v1.Node{ObjectMeta: v12.ObjectMeta{Name: "one"}}
-//
-//	kubernetes := getFake(node)
-//
-//	kubernetes.Kubeclient.(*fake.Clientset).Fake.AddReactor("list", "*", func(action testing2.Action) (handled bool, ret runtime.Object, err error) {
-//		println("code is running")
-//		return true, nil, errors.New("hello")
-//	})
-//
-//	kubernetes.GetNodeList()
-//
-//}
+func TestGetNodeConditionStatus(t *testing.T) {
+	assert.Equal(t, entities.ConditionTrue, GetNodeConditionStatus(v1.ConditionTrue))
+	assert.Equal(t, entities.ConditionFalse, GetNodeConditionStatus(v1.ConditionFalse))
+	assert.Equal(t, entities.ConditionFalse, GetNodeConditionStatus(v1.ConditionUnknown))
+}

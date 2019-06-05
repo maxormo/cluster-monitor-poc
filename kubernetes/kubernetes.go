@@ -494,6 +494,14 @@ func (kube Kubernetes) GetAction(condition Condition) NodeAction {
 	}
 }
 
+func GetNodeConditionStatus(value v1.ConditionStatus) entities.NodeConditionStatus {
+
+	if value == v1.ConditionTrue {
+		return entities.ConditionTrue
+	}
+	return entities.ConditionFalse
+}
+
 func handlePanicError(err error) {
 	if err != nil {
 		panic(err)

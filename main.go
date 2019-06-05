@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const DefaultMetricsCollectionDuration = time.Duration(20) * time.Second
+
 func main() {
 	kubeconfig := kingpin.Flag("kubeconfig", "Path to kubernetes config, in cluster initialization will be used if missing").Default("").Short('c').String()
 
@@ -22,6 +24,7 @@ func main() {
 	loopDelay := kingpin.Flag("loopDelay", "Sleep time in minutes between iterations").Default("2").Int()
 	collections := kingpin.Flag("collections", "Number of get pods collections to identify rogue pods").Default("3").Int()
 	collectionDelay := kingpin.Flag("collection-delay", "Sleep time between rogue pods collections").Default("1").Int()
+	metricsCollectionDelay := kingpin.Flag("metrics-delay", "Sleep time between node metrics collections").Default("20s").String()
 
 	namespace := kingpin.Flag("namespace", "namespace to annotate").String()
 
@@ -49,10 +52,11 @@ func main() {
 
 	podsLogger := logger.GetLogger("PodsMonitor")
 	nodesLogger := logger.GetLogger("NodesMonitor")
+	nodeMetricsLogger := logger.GetLogger("NodeMetricsMonitor")
 
 	metricsClient := entities.InitMetrics()
 
-	settings := PodsMonitorSettings{
+	podsMonitor := PodsMonitor{
 		Kube:                kubernetes.GetKubeClient(*kubeconfig, metricsClient, podsLogger, az, currentNode),
 		LoopDelay:           *loopDelay,
 		DryRun:              *dryRun,
@@ -68,7 +72,7 @@ func main() {
 
 	nodeMonitorKubeClient := kubernetes.GetKubeClient(*kubeconfig, metricsClient, nodesLogger, az, currentNode)
 
-	nodesMonitor := NodeMonitorSettings{
+	nodesMonitor := NodeMonitor{
 		CurrentNode: currentNode,
 		Provider:    az,
 		DryRun:      *dryRun,
@@ -81,12 +85,25 @@ func main() {
 
 	registerHealth()
 
-	go settings.PodsMonitor()
-	// defer starting another thread beacause of getting alot of collision between each other
-	// in modifying/reading the same kubernetes resources
-	// proper solution will be to introduce retries on all updated kubernetes operations
-	time.Sleep(10 * time.Second)
+	metricsCollectionTimeoutDuration, e := time.ParseDuration(*metricsCollectionDelay)
+
+	if e != nil {
+		metricsCollectionTimeoutDuration = DefaultMetricsCollectionDuration
+	}
+	nodeMetrics := NodesMetrics{
+		Kube:                     kubernetes.GetKubeClient(*kubeconfig, metricsClient, nodeMetricsLogger, az, currentNode),
+		MetricsClient:            metricsClient,
+		MetricsCollectionTimeout: metricsCollectionTimeoutDuration,
+	}
+
+	go nodeMetrics.NodesMetrics()
+
+	go podsMonitor.PodsMonitor()
+
 	go nodesMonitor.NodesMonitor()
+
+	// start web service for metrics and health
+	// all handlers should be register by now
 	_ = http.ListenAndServe(":8080", nil)
 }
 

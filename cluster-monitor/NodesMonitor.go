@@ -10,7 +10,7 @@ import (
 )
 
 //TODO: extract interface and encapsulate initialization of the struct in constructor like object to avoid partial init
-type NodeMonitorSettings struct {
+type NodeMonitor struct {
 	Kube        kubernetes.Kubernetes
 	DryRun      bool
 	Provider    provider.Provider
@@ -21,7 +21,7 @@ type NodeMonitorSettings struct {
 	Conditions  []kubernetes.Condition
 }
 
-func (s NodeMonitorSettings) NodesMonitor() {
+func (s NodeMonitor) NodesMonitor() {
 	s.Log.Printfln("starting nodes monitor")
 	for {
 		s.Log.Printfln("scanning through all node for not ready status")

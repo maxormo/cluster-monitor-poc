@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/compute/mgmt/compute"
+	"github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/resources"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"os"
@@ -33,15 +34,46 @@ func initEnv(creds ServicePrincipal) {
 	os.Setenv("AZURE_CLIENT_SECRET", creds.AadSecret)
 }
 
+func (azure azure) ListVmss() []string {
+
+	client := resources.NewClient(azure.account.Subscription)
+	client.Authorizer = azure.authorizer
+
+	ctx := context.Background()
+	page, e := client.ListByResourceGroup(ctx, azure.account.ResourceGroup, "resourceType eq 'Microsoft.Compute/virtualMachineScaleSets'", "", nil)
+
+	if e != nil {
+		panic(e)
+	}
+	var result []string
+	for e == nil && len(page.Values()) != 0 {
+		for _, v := range page.Values() {
+			result = append(result, *v.Name)
+		}
+		e = page.NextWithContext(ctx)
+	}
+	return result
+}
+
 func (azure azure) RestartNode(nodeName string) error {
 	vmClient := azure.getVMClient()
 	ctx := context.Background()
-	nodeId, err := azure.findNodeId(vmClient, nodeName)
-	if err != nil {
+	vmsss := azure.ListVmss()
+	var nodeId string
+	var err error
+	var targetVmss string
+	for _, vmss := range vmsss {
+		targetVmss = vmss
+		nodeId, err = azure.findNodeId(vmClient, nodeName, targetVmss)
+		if err == nil {
+			break
+		}
+	}
+	if nodeId == "" {
 		return fmt.Errorf("cannot find vm id : %v", err)
 	}
 
-	future, err := vmClient.Restart(ctx, azure.account.ResourceGroup, azure.account.ScaleSetName, nodeId)
+	future, err := vmClient.Restart(ctx, azure.account.ResourceGroup, targetVmss, nodeId)
 	if err != nil {
 		return fmt.Errorf("cannot restart vm: %v", err)
 	}
@@ -55,9 +87,10 @@ func (azure azure) RestartNode(nodeName string) error {
 	return err
 }
 
-func (azure azure) findNodeId(client compute.VirtualMachineScaleSetVMsClient, nodeName string) (string, error) {
+func (azure azure) findNodeId(client compute.VirtualMachineScaleSetVMsClient, nodeName string, scaleSetName string) (string, error) {
 	ctx := context.Background()
-	result, err := client.List(ctx, azure.account.ResourceGroup, azure.account.ScaleSetName, "", "", "")
+
+	result, err := client.List(ctx, azure.account.ResourceGroup, scaleSetName, "", "", "")
 	if err != nil {
 		return "", err
 	}
@@ -67,7 +100,7 @@ func (azure azure) findNodeId(client compute.VirtualMachineScaleSetVMsClient, no
 			return *value.InstanceID, nil
 		}
 	}
-	return "", fmt.Errorf("cannot find %s in vmss %s", nodeName, azure.account.ScaleSetName)
+	return "", fmt.Errorf("cannot find %s in vmss %s", nodeName, scaleSetName)
 
 }
 

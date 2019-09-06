@@ -441,11 +441,11 @@ func (kube Kubernetes) HardRestartNode(node string) error {
 
 		err = kube.provider.RestartNode(node)
 
-		kube.log.Printfln("restart node %s command executed", node)
-		kube.metricsClient.IncHardRestart(node)
-
-		if err != nil {
-			kube.log.Printfln("and return error %s", err.Error())
+		if err == nil {
+			kube.log.Printfln("restart node %s command executed successfully", node)
+			kube.metricsClient.IncHardRestart(node)
+		} else {
+			kube.log.Printfln("restart node %s command executed and return error %s", node, err.Error())
 		}
 
 		// uncordon
